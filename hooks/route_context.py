@@ -1,0 +1,61 @@
+import json, os, sys
+
+CODE_EXT = {".py", ".js", ".jsx", ".ts", ".tsx", ".rs", ".go", ".java", ".kt", ".cs", ".rb", ".php", ".vue", ".svelte", ".c", ".cpp", ".h", ".swift"}
+SKIP = {".git", "node_modules", "graphify-out", "dist", "build", "target", "venv", ".venv", "__pycache__"}
+BIG_REPO = 30
+BIG_MD = 20000
+root = os.environ.get("CLAUDE_PLUGIN_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+def project_dir():
+    try:
+        return json.load(sys.stdin).get("cwd") or os.getcwd()
+    except Exception:
+        return os.getcwd()
+
+
+def find_up(d, rel):
+    while True:
+        p = os.path.join(d, rel)
+        if os.path.exists(p):
+            return p
+        up = os.path.dirname(d)
+        if up == d:
+            return None
+        d = up
+
+
+def is_big(d):
+    n = 0
+    for _, dirs, names in os.walk(d):
+        dirs[:] = [x for x in dirs if x not in SKIP]
+        n += sum(os.path.splitext(f)[1] in CODE_EXT for f in names)
+        if n > BIG_REPO:
+            return True
+    return False
+
+
+def big_md(d):
+    try:
+        for f in os.listdir(d):
+            q = os.path.join(d, f)
+            if f.lower().endswith(".md") and os.path.isfile(q) and os.path.getsize(q) > BIG_MD:
+                return q
+    except OSError:
+        pass
+    return None
+
+
+d = project_dir()
+graph = find_up(d, os.path.join("graphify-out", "graph.json"))
+docs = find_up(d, "ProjectMap")
+if docs:
+    sys.stdout.write(f'Project docs: do not read whole maps. python "{root}/ask.py" "<task>" --map "{docs}" --kw k1,k2,... returns only matching sections. '
+                     "Docs you write or edit there: short bullets, paths and names, no prose, one card per area.\n")
+big = None if docs else big_md(d)
+if big:
+    sys.stdout.write(f'{os.path.basename(big)} is over 20 KB: do not read it whole. Split once: python "{root}/mapsplit.py" "{big}" --out ProjectMap, then use ask.py --map. New docs: English, terse bullets. Comments stay why-only, max 8 words.\n')
+if graph:
+    sys.stdout.write(f'To find code: python "{root}/ask.py" "<task>" --graph "{graph}" --kw k1,k2,... (8-12 identifier keywords). Delegation: skill desolator:route. Comments: why only, max 8 words.\n')
+elif is_big(d):
+    sys.stdout.write("Big repo without code index: run `graphify update .` once, then use desolator:route.\n")

@@ -1,0 +1,16 @@
+{
+  "name": "desolator",
+  "owner": {
+    "name": "Lemxy"
+  },
+  "metadata": {
+    "description": "Token and cost saver plugin for Claude Code."
+  },
+  "plugins": [
+    {
+      "name": "desolator",
+      "source": "./",
+      "description": "Token and cost saver: slim tool list, read/write/grep/bash guards, graph code search, doc maps."
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "name": "desolator",
+  "version": "0.3.0",
+  "description": "Token and cost saver: slim tool list, read/write/grep/bash guards, graph code search, doc maps.",
+  "author": {
+    "name": "Lemxy"
+  },
+  "repository": "https://github.com/Lemxy/DesolatorPlugin",
+  "license": "MIT",
+  "keywords": [
+    "tokens",
+    "cost",
+    "context",
+    "code-search",
+    "hooks"
+  ]
+}
