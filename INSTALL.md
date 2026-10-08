@@ -3,10 +3,7 @@
 ## 1. Requirements
 - Claude Code (CLI, desktop app or IDE extension).
 - Python 3 on PATH as `python`. Check: `python --version`. On Windows, if only `py` works, install Python from python.org with "Add to PATH" checked.
-- Optional, for code search (`ask.py`): [uv](https://docs.astral.sh/uv/) and graphify:
-  ```
-  uv tool install graphifyy
-  ```
+- Code search (`ask.py`) needs nothing else: it indexes the repo itself. graphify is optional (`uv tool install graphifyy`, then `graphify update .`); `ask.py` uses its graph when it exists.
 
 ## 2. Install the plugin
 From a terminal:
@@ -33,11 +30,11 @@ claude plugin list
 | Step | Command | Gives |
 |---|---|---|
 | Hide unused tools | `/desolator:slim` (or `--user` for all projects) | smaller context every turn |
-| Code index | `graphify update .` in the repo root | `ask.py` search, Grep routing |
+| Code index (optional) | `graphify update .` in the repo root | Grep routing; `ask.py` works without it |
 | Big markdown map | `python <plugin>/mapsplit.py PROJECT_MAP.md --out ProjectMap` | doc sections on demand |
 | See where tokens go | `python <plugin>/stats.py --sessions 5` | per-session breakdown |
 
-Re-run `graphify update .` after big code changes; the index does not refresh itself.
+If you use graphify, re-run `graphify update .` after big code changes; a graphify graph does not refresh itself. The built-in index does.
 
 `<plugin>` is the install folder, e.g. `~/.claude/plugins/cache/desolator/desolator/<version>`.
 
@@ -70,6 +67,6 @@ Run `slim --undo` first: deny rules live in your settings, not in the plugin.
 
 ## Troubleshooting
 - **Hooks do nothing:** start a new session; check `python --version` works in the same shell.
-- **`graph not found`:** run `graphify update .` in the repo root.
+- **`ask.py` finds nothing or the wrong area:** run it from inside the repo (or pass `--root`), and rerun once with different keywords.
 - **A tool is missing after slim:** `/desolator:slim --undo`, or remove that entry from `permissions.deny`.
 - **Grep was refused once:** intended. Repeat the same Grep and it runs.

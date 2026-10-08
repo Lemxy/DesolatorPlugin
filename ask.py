@@ -4,6 +4,9 @@ Usage: python ask.py "how does login work" [--graph graphify-out/graph.json] [--
 import json, math, os, re, sys, argparse, pathlib
 from collections import defaultdict
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from indexer import build_cached
+
 STOP = set("a an the is are was were do does did how what where which who why when to of in on for and or "
            "with from by it its this that work works use used using get gets make makes handle handles "
            "happen happens code file files function functions".split())
@@ -22,6 +25,7 @@ SYN = {
 SKIP_DIRS = {".git", "node_modules", "graphify-out", "dist", "build", "target", "venv", ".venv", "__pycache__", ".next"}
 TEXT_EXT = {".js", ".jsx", ".ts", ".tsx", ".rs", ".md", ".py", ".go", ".java", ".kt", ".cs", ".rb", ".php", ".vue", ".svelte", ".c", ".cpp", ".h", ".swift"}
 MAX_BYTES = 500_000
+GW = 0.25  # weight of symbol-level graph hits against file name and text hits
 
 
 CYR = re.compile("[а-яё]")
@@ -47,11 +51,13 @@ def match(t, w):
     return len(min(t, w, key=len)) >= 4 and (w.startswith(t) or t.startswith(w))
 
 
-def load(path):
-    p = pathlib.Path(path)
-    if not p.is_file():
-        sys.exit(f"graph not found: {path}. Run `graphify update <repo>` once.")
-    g = json.load(open(p, encoding="utf8"))
+def load(path, root=None):
+    p = pathlib.Path(path) if path else None
+    if p and p.is_file():
+        g = json.load(open(p, encoding="utf8"))
+    else:
+        # no graphify graph: index the repo ourselves
+        g = build_cached(root)
     deg = defaultdict(int)
     for e in g["links"]:
         deg[e["source"]] += 1
@@ -120,13 +126,13 @@ def content_score(T, root):
 
 def find_root(gpath):
     # wrong root silently disables content scoring
-    d = pathlib.Path(gpath).resolve().parent
+    d = pathlib.Path(gpath).resolve().parent if gpath else pathlib.Path.cwd()
     if d.name == "graphify-out":
         return d.parent
     for up in [d, *d.parents]:
         if (up / ".git").exists():
             return up
-    return d.parent
+    return d if not gpath else d.parent
 
 
 def find_graph(start="."):
@@ -134,13 +140,13 @@ def find_graph(start="."):
     for up in [d, *d.parents]:
         if (up / "graphify-out" / "graph.json").is_file():
             return str(up / "graphify-out" / "graph.json")
-    return "graphify-out/graph.json"
+    return None
 
 
 def ask(q, gpath, top=12, kw=None, content=True, neighbors=True, slots=0, scored=False, root=None):
-    g, deg = load(gpath)
     # kw: keywords already chosen by the calling agent, skips guessing
     root = pathlib.Path(root).resolve() if root else find_root(gpath)
+    g, deg = load(gpath, root)
     T = {w.lower(): 1.0 for w in kw} if kw else terms(q, user_syn(root))
     nodes = {n["id"]: n for n in g["nodes"]}
     score = {}
@@ -167,7 +173,7 @@ def ask(q, gpath, top=12, kw=None, content=True, neighbors=True, slots=0, scored
         for j, bonus in [(i, 1.0)] + [(k, 0.3) for k in nbr[i][:3] if k in nodes and not noise(nodes[k], deg[k])]:
             n = nodes[j]
             f = files[n["source_file"]]
-            f[0] += score.get(j, 0.5) * bonus
+            f[0] += score.get(j, 0.5) * bonus * GW
             f[1][n["label"]] = n.get("source_location", "")
     named = {}
     for f in {n["source_file"] for n in nodes.values() if n.get("source_file")}:
@@ -278,12 +284,13 @@ if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     p = argparse.ArgumentParser()
     p.add_argument("q")
-    p.add_argument("--graph", default=None, help="default: nearest graphify-out/graph.json up from cwd")
+    p.add_argument("--graph", default=None, help="graph.json; default: nearest graphify-out/graph.json, else the repo is indexed on the fly")
     p.add_argument("--root", default=None, help="repo root for content search; default from graph path")
+    p.add_argument("--own", action="store_true", help="ignore any graphify graph, use the built-in indexer")
     p.add_argument("--top", type=int, default=12)
     p.add_argument("--kw", help="comma-separated keywords chosen by the agent")
     p.add_argument("--map", nargs="?", const="ProjectMap", help="search markdown docs in this folder instead of code")
     p.add_argument("--budget", type=int, default=800, help="max tokens of doc text for --map")
     a = p.parse_args()
     kw = a.kw.split(",") if a.kw else None
-    print(ask_map(a.q, a.map, kw, a.budget) if a.map else fmt(ask(a.q, a.graph or find_graph(), a.top, kw, root=a.root)))
+    print(ask_map(a.q, a.map, kw, a.budget) if a.map else fmt(ask(a.q, None if a.own else a.graph or find_graph(), a.top, kw, root=a.root)))

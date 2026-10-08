@@ -1,20 +1,10 @@
 """PreToolUse(Grep): send the first broad repo-wide search to ask.py; exact greps and repeats pass."""
 import json, os, re, sys, tempfile
+from common import find_up, is_big
 
 root = os.environ.get("CLAUDE_PLUGIN_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # plain words or word|word: a concept search, not an exact one
 BROAD = re.compile(r"^\(?[A-Za-z_][\w ]*(\|[A-Za-z_][\w ]*)*\)?$")
-
-
-def find_up(d, rel):
-    while True:
-        p = os.path.join(d, rel)
-        if os.path.exists(p):
-            return p
-        up = os.path.dirname(d)
-        if up == d:
-            return None
-        d = up
 
 
 def main():
@@ -32,7 +22,8 @@ def main():
     if os.path.isfile(path) or t.get("glob") or t.get("type") or not BROAD.match(pat):
         return
     graph = find_up(cwd, os.path.join("graphify-out", "graph.json"))
-    if not graph:
+    # without a graphify graph ask.py indexes the repo itself, worth it only for big repos
+    if not graph and not is_big(cwd):
         return
     mark = os.path.join(tempfile.gettempdir(), f"desolator-grep-{h.get('session_id', 'x')}")
     try:
@@ -45,11 +36,12 @@ def main():
         return
     with open(mark, "a", encoding="utf8") as f:
         f.write(key + "\n")
+    via = f' --graph "{graph}"' if graph else ""
     kw = ",".join(dict.fromkeys(w.lower() for w in re.split(r"[|() ]+", pat) if w))
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "PreToolUse",
         "permissionDecision": "deny",
-        "permissionDecisionReason": f'Repo has a code index. Try first: python "{root}/ask.py" "<task>" --graph "{graph}" '
+        "permissionDecisionReason": f'Repo has a code index. Try first: python "{root}/ask.py" "<task>"{via} '
                                     f"--kw {kw},<more synonyms> (~200 tokens, files + lines). It finds the area, not every "
                                     "use: for renames or all usages, repeat the same grep and it will run."}}))
 

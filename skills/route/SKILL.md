@@ -8,10 +8,10 @@ description: Find code with ask.py and delegate bulk mechanical edits to scout (
 Pick 8-12 lowercase identifier-style keywords from the task, with synonyms and the technical concept behind everyday wording (words that would appear in function, class or file names). Then:
 
 ```
-python "${CLAUDE_PLUGIN_ROOT}/ask.py" "<task in one line>" --graph <repo>/graphify-out/graph.json --kw k1,k2,k3
+python "${CLAUDE_PLUGIN_ROOT}/ask.py" "<task in one line>" --kw k1,k2,k3
 ```
 
-- No graph yet: run `graphify update <repo>` once (parses code locally, no LLM), then ask.
+- No setup: ask.py indexes the repo itself (cached, refreshes when files change). A graphify graph at `graphify-out/graph.json` is used if present; `--own` ignores it.
 - Read only the returned files and the lines around the listed symbols.
 - Result misses the obvious area: rerun once with different keywords. Do not rerun more than twice.
 - Default top is 12 files. For repos under ~30 modules add `--top 6`.
