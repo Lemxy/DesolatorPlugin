@@ -38,12 +38,11 @@ def main():
         f.write(key + "\n")
     via = f' --graph "{graph}"' if graph else ""
     kw = ",".join(dict.fromkeys(w.lower() for w in re.split(r"[|() ]+", pat) if w))
+    # the grep still runs: a deny costs a full turn when the agent repeats it anyway
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "PreToolUse",
-        "permissionDecision": "deny",
-        "permissionDecisionReason": f'Repo has a code index. Try first: python "{root}/ask.py" "<task>"{via} '
-                                    f"--kw {kw},<more synonyms> (~200 tokens, files + lines). It finds the area, not every "
-                                    "use: for renames or all usages, repeat the same grep and it will run."}}))
+        "additionalContext": f'Repo has a code index. For concept searches try: python "{root}/ask.py" "<task>"{via} '
+                             f"--kw {kw},<more synonyms> (~200 tokens, files + lines). It finds the area, not every use."}}))
 
 
 main()
