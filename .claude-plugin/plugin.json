@@ -1,6 +1,6 @@
 {
   "name": "desolator",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Token and cost saver: slim tool list, read/write/grep/bash guards, graph code search, doc maps.",
   "author": {
     "name": "Lemxy"

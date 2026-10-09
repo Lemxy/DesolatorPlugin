@@ -2,6 +2,27 @@
 
 Token and cost saver for Claude Code. Every turn re-reads the whole context, so the plugin cuts what enters it: unused tool schemas, whole-file reads, long logs, broad searches.
 
+## Benchmark: bare Claude Code vs. Desolator (end to end)
+
+![Desolator vs bare Claude Code: tokens, cost, turns, time](bench/results.svg)
+
+Same 8 code-reading questions on Django, Flask and requests (public repos), Sonnet, 2 repetitions each, alternating arm order: 32 `claude -p` runs. All 16 answers are correct in both arms. Arm "with plugin" = this plugin + `slim.py code`.
+
+| Parameter | Without plugin | With plugin | Saved (exact) | Chart (rounded to 5%) |
+|---|---|---|---|---|
+| Tokens, total (incl. cache reads) | 1,744,493 | 741,442 | 57% | -55% |
+| Fresh input tokens | 155,560 | 139,899 | 10% | -10% |
+| Output tokens (replies) | 21,340 | 12,526 | 41% | -40% |
+| **Cost** | **$1.15** | **$0.80** | **30%** | **-30%** |
+| Turns | 72 | 58 | 19% | -20% |
+| Wall time | 295 s | 242 s | 18% | -20% |
+
+Read it like this:
+- Cost is the number that matters. Most of the token saving is cache reads, which are billed at about a tenth of the normal price, so -57% tokens becomes -30% money.
+- Where it comes from (separate measurements): `slim` removes tool schemas that were re-sent every turn (about -56% tokens, -15% cost); the one-line reply style cuts reply tokens by about a third; the grep hint avoids a wasted turn. `ask.py` itself did not move the end-to-end numbers: the agent rarely calls it, and its built-in Grep is already good enough on small and medium repos.
+- Scope: read-only code questions, one model, three repos, 16 runs per arm. Run-to-run spread of the same task is about 12% on cost, so single numbers are approximate. Sessions that edit files will save less.
+- Reproduce: `python bench/setup_e2e.py && python bench/e2e.py --reps 2 && python bench/make_chart.py bench/results/*.jsonl` (about 2.5M tokens). Raw runs: [bench/results/run.jsonl](bench/results/run.jsonl).
+
 ## Install
 ```
 claude plugin marketplace add Lemxy/DesolatorPlugin
@@ -16,9 +37,9 @@ Full guide (setup per project, settings, update, removal): [INSTALL.md](INSTALL.
 - `context_guard.py` (UserPromptSubmit): warns once per 50k step when the session context passes 150k (`DESOLATOR_CTX_WARN`). Long sessions are most of real token use.
 - `write_guard.py` (PreToolUse Write): blocks full rewrites of existing files over 20 KB (`DESOLATOR_WRITE_MAX`, bypass `DESOLATOR_ALLOW_BIG_WRITE=1`). Edit sends only the change.
 - `read_guard.py` (PreToolUse Read): blocks whole reads of files over 40 KB (`DESOLATOR_READ_MAX`, bypass `DESOLATOR_ALLOW_BIG_READ=1`). Grep, then Read with offset/limit.
-- `grep_route.py` (PreToolUse Grep): in a repo with a graphify graph or over 30 code files, the first broad repo-wide Grep (`word` or `a|b`) is sent to ask.py. Regex, file/glob/type-scoped greps and repeats pass, so exhaustive searches still work. Off: `DESOLATOR_GREP_ROUTE=0`.
+- `grep_route.py` (PreToolUse Grep): in a repo with a graphify graph or over 30 code files, the first broad repo-wide Grep (`word` or `a|b`) still runs, with a one-line ask.py hint attached (a deny cost a full turn whenever the agent repeated the grep). Regex and file/glob/type-scoped greps get no hint. Off: `DESOLATOR_GREP_ROUTE=0`.
 - `bash_trim.py` (PreToolUse Bash): build/test/install output over 120 lines -> first 40 + last 80 lines, full log in a temp file, exit code kept. Only in bypassPermissions mode or with `DESOLATOR_BASH_TRIM=1`: the wrapper breaks allowlist matching, so normal modes would prompt. Piped, chained or background commands pass.
-- `route_context.py` (SessionStart): one-line hints only when they apply (code graph, `ProjectMap/`, big repo (ask.py indexes it itself), markdown over 20 KB). Projects without these pay nothing.
+- `route_context.py` (SessionStart): always one reply-style line (answer first, 1-3 sentences, no recap; reply tokens are the priciest, `DESOLATOR_TERSE=0` turns it off), then one-line hints only when they apply (code graph, `ProjectMap/`, big repo (ask.py indexes it itself), markdown over 20 KB). Projects without these pay for the style line only.
 
 ### Tools
 - `slim.py` / `/desolator:slim`: hides tools a coding session does not need (Artifact, Cron, Worktree, ...) via `permissions.deny`. WebSearch/WebFetch stay. `python slim.py` (this project), `--user` (all projects), `core` (also hides Agent/Task/TodoWrite), `--scan` (asks Haiku once for the real tool list, hides extra tools and MCP servers), `--undo`, `--dry-run`.
@@ -50,4 +71,4 @@ On a private Tauri + Node monorepo (~600 source files), Sonnet:
 - Reasoning language (EN vs RU), 10 runs: no stable cost difference; tool calls dominate output.
 - Sonnet with ask: 3-9% fewer tokens on 12 of 12 easy bugs.
 
-Numbers are per mechanism; an end-to-end benchmark is not done yet.
+Numbers above are per mechanism, measured on other corpora. The end-to-end result for the whole plugin is at the top of this file.
